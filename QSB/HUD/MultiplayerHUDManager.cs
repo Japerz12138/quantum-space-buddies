@@ -91,6 +91,7 @@ public class MultiplayerHUDManager : MonoBehaviour, IAddComponentOnStart
 			return;
 		}
 
+
 		/* Tricky problem to solve.
 		 * - 11 available lines for text to fit onto
 		 * - Each line can be max 41 characters
@@ -139,8 +140,9 @@ public class MultiplayerHUDManager : MonoBehaviour, IAddComponentOnStart
 		}
 
 		var finalText = "";
-		foreach (var line in _lines)
+		for (int i = 0; i < _lines.Length; i++)
 		{
+			var line = _lines[i];
 			var msgColor = ColorUtility.ToHtmlStringRGBA(line.color);
 			var msg = $"<color=#{msgColor}>{line.msg}</color>";
 
@@ -148,10 +150,10 @@ public class MultiplayerHUDManager : MonoBehaviour, IAddComponentOnStart
 			{
 				finalText += Environment.NewLine;
 			}
-			else if (line.msg.Length == CHAR_COUNT + 1)
-			{
-				finalText += msg;
-			}
+					else if (i == _lines.Length - 1 && line.msg.Length == CHAR_COUNT + 1)
+		{
+			finalText += msg;
+		}
 			else
 			{
 				finalText += $"{msg}{Environment.NewLine}";
@@ -171,6 +173,36 @@ public class MultiplayerHUDManager : MonoBehaviour, IAddComponentOnStart
 	}
 
 	ListStack<string> previousMessages = new(true);
+
+	private static char ValidateUnicodeInput(string input, int charIndex, char addedChar)
+	{
+		return addedChar;
+	}
+
+	private void HandleUnicodeInput()
+	{
+		// Handled by OnGUI() for Input System compatibility
+	}
+
+	private void OnGUI()
+	{
+		if (!_writingMessage || _inputField == null)
+			return;
+
+		var currentEvent = Event.current;
+		if (currentEvent.type == EventType.KeyDown)
+		{
+			if (currentEvent.character != 0 && !char.IsControl(currentEvent.character))
+			{
+				var currentText = _inputField.text;
+				var newText = currentText + currentEvent.character;
+				
+				_inputField.text = newText;
+				_inputField.caretPosition = newText.Length;
+				currentEvent.Use();
+			}
+		}
+	}
 
 	private void Update()
 	{
@@ -228,6 +260,12 @@ public class MultiplayerHUDManager : MonoBehaviour, IAddComponentOnStart
 			_inputField.text = "";
 			message = message.Replace("\n", "").Replace("\r", "");
 
+					if (string.IsNullOrWhiteSpace(message))
+		{
+			_textChat.GetComponent<CanvasGroup>().alpha = 0;
+			return;
+		}
+
 			previousMessages.Push(message);
 
 			if (QSBCore.DebugSettings.DebugMode && CommandInterpreter.InterpretCommand(message))
@@ -248,6 +286,7 @@ public class MultiplayerHUDManager : MonoBehaviour, IAddComponentOnStart
 		if (_writingMessage)
 		{
 			_lastMessageTime = Time.time;
+			HandleUnicodeInput();
 		}
 
 		if (!_writingMessage
@@ -421,7 +460,37 @@ public class MultiplayerHUDManager : MonoBehaviour, IAddComponentOnStart
 		_inputField = inputFieldGO.GetComponent<InputField>();
 		_inputField.text = "";
 		_inputField.characterLimit = 256;
-		_textChat.Find("Messages").Find("Message").GetComponent<Text>().text = "";
+		_inputField.contentType = InputField.ContentType.Standard;
+		_inputField.inputType = InputField.InputType.Standard;
+		_inputField.lineType = InputField.LineType.MultiLineNewline;
+		_inputField.onValidateInput = ValidateUnicodeInput;
+		
+		var textComponent = _inputField.textComponent;
+		if (textComponent != null)
+		{
+			textComponent.supportRichText = true;
+			var font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+			if (font != null)
+			{
+				textComponent.font = font;
+			}
+		}
+		
+		var placeholderComponent = _inputField.placeholder as Text;
+		if (placeholderComponent != null)
+		{
+			placeholderComponent.supportRichText = true;
+		}
+		var messageTextComponent = _textChat.Find("Messages").Find("Message").GetComponent<Text>();
+		messageTextComponent.text = "";
+		
+		messageTextComponent.supportRichText = true;
+		messageTextComponent.alignment = TextAnchor.LowerLeft;
+		var messageFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
+		if (messageFont != null)
+		{
+			messageTextComponent.font = messageFont;
+		}
 		_lines.Clear();
 		_messages.Clear();
 		_textChat.GetComponent<CanvasGroup>().alpha = 0;
